@@ -153,7 +153,7 @@ if(!empty($_GET['podcast-id'])){
 					<itunes:duration>',$row['duration'],'</itunes:duration>
 					<itunes:image href="',$row['image'],'" />
 					<itunes:explicit>',$row['explicit'],'</itunes:explicit>
-					<itunes:block>no</itunes:block>
+					<itunes:block>',$blockiTunes,'</itunes:block>
 					<itunes:keywords>',$row['keywords'],'</itunes:keywords>
 					<itunes:subtitle><![CDATA[',$row['subtitle'],']]></itunes:subtitle>
 					<itunes:summary><![CDATA[',$row['subtitle'],']]></itunes:summary>
