@@ -16,6 +16,17 @@ Podeasy is made to be lightweight and plug-and-play!
 7. Test it
 8. Link to this file from iTunes and other podcast services
 
+### Notes ###
+
+* Track 0 holds overall podcast info
+* You can support multiple podcasts with Podeasy using different Podcast IDs
+* Links must be absolute paths, for example "http://example.com/podcast-episodes/0001.mp3"
+* You must manually put in durations. Read an episode's length before you upload it, and you can put that in.
+* Your episode files must be in the same folder or a subfolder of this file
+* Only MP3 podcasts are currently supported
+* The keywords for Track 0 hold multiple data, and must be input like so: "[PODCAST CATEGORY]|[PODCAST SUBCATEGORY]|[PODCAST TAGS]". The values must each be separated by a bar | as shown
+* Email joshuapowlison@gmail.com or leave a note on GitHub if you run into any issues!
+
 */
 
 ##########################################
@@ -33,7 +44,6 @@ date_default_timezone_set('UTC');	#Use the timezone you're basing your MySQL tab
 $language='en-us';
 
 ### Data ###
-$websiteAddress='https://example.com/';
 $ownerName='Owner Name';
 $ownerEmail='owner.email@gmail.com';
 $managingEditor='managingeditor.email@gmail.com (Editor Name)';	#Contact about the podcast's content
@@ -41,9 +51,9 @@ $webMaster='webmaster.email@gmail.com (Admin Name)';			#Contact about RSS feed p
 $copyright='Copyright 20XX Your Name. All rights reserved.';	#Your copyright notice (or CC license, or whatever)
 
 ### Custom ###
-$endingText='<br><a href="email@gmail.com">Email me</a>';		#Text to end each podcast episode description with
-$leadingZeroes=2;												#Number of leading zeroes for episode numbers
-$blockiTunes='no';
+$endingText='<br><a href="email@gmail.com">Email me</a>';		#Text to end each podcast episode description with (can be left blank)
+$leadingZeroes=2;												#Number of leading zeroes for episode numbers (automatically inserted)
+$blockiTunes='no';												#Block inclusion in the iTunes store
 
 ##########################################
 ################## CODE ##################
@@ -65,7 +75,24 @@ if(!empty($_GET['podcast-id'])){
 		[PDO::ATTR_EMULATE_PREPARES => false, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
 	);
 	
-	#Get story info from the passed URL
+	#Get the last pub date
+	$data=$db->prepare(
+		'SELECT
+			MAX(pub_date) AS last_pub_date
+		FROM podcasts
+		WHERE
+			podcast_id=?
+			AND pub_date<NOW()
+			AND public=1'
+	);
+	
+	if($data->execute([$_GET['podcast-id']])){
+		if($row=$data->fetch()){
+			$lastPubDate=$row['last_pub_date'];
+		}
+	}
+	
+	#Get podcast info based on the passed podcast-id
 	$data=$db->prepare(
 		'SELECT
 			track,
@@ -86,11 +113,11 @@ if(!empty($_GET['podcast-id'])){
 			AND pub_date<NOW()
 			AND public=1
 		ORDER BY track ASC'
-		#MAX(pub_date) AS last_pub_date
 	);
 	
 	if($data->execute([$_GET['podcast-id']])){
 		$zeroFound=false;
+		$relPath='http'.($_SERVER['HTTPS']=='' ? '':'s').'://'.$_SERVER['HTTP_HOST'].dirname($_SERVER['PHP_SELF']).'/';
 		
 		#Tag reference: http://podcastersroundtable.com/pm17/
 		
@@ -100,13 +127,17 @@ if(!empty($_GET['podcast-id'])){
 				#Parse the results as XML
 				header('Content-type: application/xml');
 				
+				#Split up keywords into its various vars (only needed for track 0)
 				$keywordSplit=explode('|',$row['keywords']);
+				
+				#Get values from track 0
+				$websiteAddress=$row['link'];
 					
 				echo '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
 					<channel>
 						<atom:link href="',$websiteAddress,'rss.php?podcast-id=',$_GET['podcast-id'],'" rel="self" type="application/rss+xml" />
 						<title>',$row['title'],'</title>
-						<pubDate>',date('r',strtotime($row['last_pub_date'])),'</pubDate>
+						<pubDate>',date('r',strtotime($lastPubDate)),'</pubDate>
 						<generator>Podeasy</generator>
 						<link>',$websiteAddress,'</link>
 						<language>',$language,'</language>
@@ -149,7 +180,7 @@ if(!empty($_GET['podcast-id'])){
 					<guid>',$row['link'],'</guid>
 					<link>',$row['link'],'</link>
 					<description><![CDATA[',$row['description'],$endingText,']]></description>
-					<enclosure length="',filesize(str_replace($websiteAddress,'',$row['link'])),'" type="audio/mpeg" url="',$row['link'],'" />
+					<enclosure length="',filesize(str_replace($relPath,'',$row['link'])),'" type="audio/mpeg" url="',$row['link'],'" />
 					<itunes:duration>',$row['duration'],'</itunes:duration>
 					<itunes:image href="',$row['image'],'" />
 					<itunes:explicit>',$row['explicit'],'</itunes:explicit>

@@ -1,4 +1,4 @@
 # Podeasy
-A small, simple setup for podcasting with PHP and MySQL. Includes a tutorial and clear instructions to help you get your awesome podcast up and running quickly!
+A small, simple setup for podcasting with PHP and MySQL. Includes a tutorial in `podeasy.php` with clear instructions to get your awesome podcast up and running quickly!
 
-**Wait until we have a release, it's not quite ready yet!!!**
+Problems? Email [joshuapowlison@gmail.com](mailto:joshuapowlison@gmail.com)
