@@ -7,12 +7,14 @@
 /*
 Podeasy is made to be lightweight and plug-and-play!
 
-1. Create a MYSQL Database (or use one you already have)
-2. Using phpMyAdmin, load in the table-layout.sql file
-3. Alter the information in your new table however you like
-4. Fill out the info below
-5. Put this file on your server
-6. Link to this file from iTunes and other podcast services
+1. Create a MYSQL database (or use one you already have)
+2. Create a MySQL user with at least SELECT permissions (or use one you already have)
+3. Using phpMyAdmin, import the import-table.sql file into your database
+4. Alter the information in your new table however you like!
+5. Fill out the info below
+6. Put this file on your server
+7. Test it
+8. Link to this file from iTunes and other podcast services
 
 */
 
@@ -21,125 +23,153 @@ Podeasy is made to be lightweight and plug-and-play!
 ##########################################
 
 ### Technical ###
-$host='localhost';												#Can probably stick with this
-$database='podcast';											#The database your podcast's table is in
-$username='user';												#The MySQL user name (not your hosting account name)
-$password='password';											#The MySQL user password
+$host='localhost';			#Can probably stick with this
+$database='podcast';		#The database your podcast's table is in
+$username='user';			#The MySQL user name (not your hosting account name)
+$password='password';		#The MySQL user password
 
-date_default_timezone_set('UTC');								#Use the timezone you're basing your MySQL table off (http://php.net/manual/en/timezones.php)
+date_default_timezone_set('UTC');	#Use the timezone you're basing your MySQL table off (http://php.net/manual/en/timezones.php)
+
+$websiteAddress='https://example.com/';
 
 ### Data ###
-$webMaster='email@gmail.com (Admin Name)';						#People can contact them if something goes wrong with your RSS feed
-$managingEditor='email@gmail.com (Editor Name)';				#People can contact them with questions or comments on the podcast
-$copyright='Copyright 20XX Your Name. All rights reserved.';	#Your copyright notice (or lack of copyright notice)
+$authorName='Author Name';
+$ownerName='Owner Name';
+$ownerEmail='owner.email@gmail.com';
+$managingEditor='managingeditor.email@gmail.com (Editor Name)';	#Contact about the podcast's content
+$webMaster='webmaster.email@gmail.com (Admin Name)';			#Contact about RSS feed problems
+$copyright='Copyright 20XX Your Name. All rights reserved.';	#Your copyright notice (or CC license, or whatever)
 
 ##########################################
 ################## CODE ##################
 ##########################################
 
-#Echo out an RSS feed
-
 #Don't allow error reporting- it can easily break the XML file created for RSS (RSS is just an XML file).
+#Can set to 1 for testing, but set back to 0 before it goes live!
 error_reporting(0);
 
 #Get database
 $db=new PDO(
 	'mysql:host='.$host.';
-	dbname='.$podcast.';
+	dbname='.$database.';
 	charset=utf8',
 	$username,
 	$password,
 	[PDO::ATTR_EMULATE_PREPARES => false, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
 );
 
-#If a story was passed
-if(
-	!empty($_GET['podcast-id']) #If the basename is blank
-){
+#If a ?podcast-id was passed
+if(!empty($_GET['podcast-id'])){
 	#Create an RSS webpage for a story
 	
 	#Get story info from the passed URL
-	$data=$db->prepare("SELECT *
+	$data=$db->prepare(
+		'SELECT
+			title,
+			pub_date,
+			link,
+			image,
+			description,
+			subtitle,
+			keywords
 		FROM podcasts
-		WHERE podcast_id=?
-		AND track=0"); #track 0 holds the podcast's information
+		WHERE
+			podcast_id=?
+			AND pub_date<NOW()
+			AND public=1
+			AND track=0'
+	); #track 0 holds the podcast's information
 	
 	if($data->execute([$_GET['podcast-id']])){
-		if($row=$data->fetch()){
+		if($podcast=$data->fetch()){
 			#Parse the results as XML
-			header("Content-type: application/xml");
+			header('Content-type: application/xml');
 			
-			#Get the most recent pub date; that's the podcast's pub date
-			$dataMid=$db->prepare("SELECT MAX(pub_date) AS pub_date
+			#Get the most recent pub date; that's the podcast's pub date. This can impact Podcast players and how they update.
+			$data=$db->prepare(
+				'SELECT
+					MAX(pub_date) AS pub_date
 				FROM podcasts
-				WHERE podcast_id=?
-				AND pub_date<NOW()
-				AND public=1");
-			if($dataMid->execute([$_GET['podcast-id']])){
-				if($rowMid=$dataMid->fetch()){
-					$keywordSplit=explode('|',$row['keywords']);
+				WHERE
+					podcast_id=?
+					AND pub_date<NOW()
+					AND public=1'
+			);
+			if($data->execute([$_GET['podcast-id']])){
+				if($maxDate=$data->fetch()){
+					$keywordSplit=explode('|',$podcast['keywords']);
 					
 					echo '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">'
 						,'<channel>'
-							,'<atom:link href="https://joshpowlison.com/rss.php?podcast-id=',$_GET['podcast-id'],'" rel="self" type="application/rss+xml" />'
-							,'<title>',$row['title'],'</title>'
-							,'<pubDate>',date('r',strtotime($rowMid['pub_date'])),'</pubDate>'
-							,'<link>https://joshpowlison.com/</link>'
-							,'<description>',$row["description"],'</description>'
+							,'<atom:link href="',$websiteAddress,'rss.php?podcast-id=',$_GET['podcast-id'],'" rel="self" type="application/rss+xml" />'
+							,'<title>',$podcast['title'],'</title>'
+							,'<pubDate>',date('r',strtotime($maxDate['pub_date'])),'</pubDate>'
+							,'<link>',$websiteAddress,'</link>'
+							,'<description>',$podcast['description'],'</description>'
 							,'<language>en-us</language>'
 							,'<webMaster>'.$webMaster.'</webMaster>'
 							,'<copyright><![CDATA[',$copyright,']]></copyright>'
-							,'<docs>https://joshpowlison.com/</docs>'
+							,'<docs>',$websiteAddress,'</docs>'
 							,'<managingEditor>',$managingEditor,'</managingEditor>'
 							,'<image>'
-								,'<url>',$row['image'],'</url>'
-								,'<title>',$row['title'],'</title>'
-								,'<link><![CDATA[https://joshpowlison.com/]]></link>'
+								,'<url>',$podcast['image'],'</url>'
+								,'<title>',$podcast['title'],'</title>'
+								,'<link><![CDATA[',$websiteAddress,']]></link>'
 							,'</image>'
 							
 							#iTunes specific tags
-							,'<itunes:summary><![CDATA[',$row['description'],']]></itunes:summary>'
-							,'<itunes:author>Josh Powlison</itunes:author>'
+							,'<itunes:summary><![CDATA[',$podcast['description'],']]></itunes:summary>'
+							,'<itunes:author>',$authorName,'</itunes:author>'
 							,'<itunes:category text="',$keywordSplit[0],'"/>'
 							,'<itunes:category text="',$keywordSplit[1],'"/>'
 							,'<itunes:keywords>',$keywordSplit[2],'</itunes:keywords>'
-							,'<itunes:image href="',$row['image'],'" />'
+							,'<itunes:image href="',$podcast['image'],'" />'
 							,'<itunes:explicit>no</itunes:explicit>'
 							,'<itunes:owner>'
-								,'<itunes:name><![CDATA[Josh Powlison]]></itunes:name>'
-								,'<itunes:email>joshuapowlison@gmail.com</itunes:email>'
+								,'<itunes:name><![CDATA[',$ownerName,']]></itunes:name>'
+								,'<itunes:email>',$ownerEmail,'</itunes:email>'
 							,'</itunes:owner>' #Owner of the podcast
-							,'<itunes:subtitle><![CDATA[',$row['subtitle'],']]></itunes:subtitle>' #Podcast subtitle
+							,'<itunes:subtitle><![CDATA[',$podcast['subtitle'],']]></itunes:subtitle>' #Podcast subtitle
 				
 					;
 							
 							#Get and echo story part info
-							$data2=$db->prepare("SELECT *
+							$data2=$db->prepare(
+								'SELECT
+									title,
+									pub_date,
+									link,
+									image,
+									description,
+									subtitle,
+									keywords
 								FROM podcasts
-								WHERE podcast_id=?
-								AND track>0
-								AND pub_date<NOW()
-								AND public=1
-								ORDER BY track ASC");
-							if($data2->execute([$_GET['podcast-id']])){
-								while($row2 = $data2->fetch()){
+								WHERE
+									podcast_id=?
+									AND track>0
+									AND pub_date<NOW()
+									AND public=1
+								ORDER BY track ASC'
+							);
+							if($data->execute([$_GET['podcast-id']])){
+								while($episode = $data->fetch()){
 
 									echo "<item>"
-										,'<title>',str_pad($row2['track'],3,'0',STR_PAD_LEFT),': ',$row2['title'],'</title>' #Episode title
-										,'<link>',$row2['link'],'</link>' #Episode file link
-										,"<guid>{$row2['link']}</guid>" #Episode file link
-										,"<pubDate>", date('r',strtotime($row2['pub_date'])), "</pubDate>"
-										,"<description><![CDATA[",$row2['description']
+										,'<title>',str_pad($episode['track'],3,'0',STR_PAD_LEFT),': ',$episode['title'],'</title>' #Episode title
+										,'<link>',$episode['link'],'</link>' #Episode file link
+										,"<guid>{$episode['link']}</guid>" #Episode file link
+										,"<pubDate>", date('r',strtotime($episode['pub_date'])), "</pubDate>"
+										,"<description><![CDATA[",$episode['description']
 										,$keywordSplit[3]
 										,"]]></description>" #Episode description
-										,"<enclosure length='",filesize(str_replace('http://joshpowlison.com/','',$row2['link'])),"' type='audio/mpeg' url='{$row2['link']}' />" #Link to the file. Length is the file's number of bytes
+										,"<enclosure length='",filesize(str_replace($websiteAddress,'',$episode['link'])),"' type='audio/mpeg' url='{$episode['link']}' />" #Link to the file. Length is the file's number of bytes
 									
 										#iTunes specific tags
-										,'<itunes:image href="',$row2['image'],'" />' #Episode image
-										,'<itunes:duration>',$row2['duration'],'</itunes:duration>'
+										,'<itunes:image href="',$episode['image'],'" />' #Episode image
+										,'<itunes:duration>',$episode['duration'],'</itunes:duration>'
 										,'<itunes:explicit>no</itunes:explicit>'
-										,'<itunes:keywords>',$row2['keywords'],'</itunes:keywords>'
-										,'<itunes:subtitle><![CDATA[',$row2['subtitle'],']]></itunes:subtitle>'
+										,'<itunes:keywords>',$episode['keywords'],'</itunes:keywords>'
+										,'<itunes:subtitle><![CDATA[',$episode['subtitle'],']]></itunes:subtitle>'
 									,'</item>';
 								}
 							}
@@ -152,10 +182,17 @@ if(
 				}
 			}
 		}else{ #The rss feed wasn't found
-			echo "We couldn't find the rss feed you called for!";
-			exit;
+			#Do nothing; it'll go as it does below!
 		}
 	}
 }
 
-?>No rss feed found!
+?>
+<h1>No rss feed found!</h1>
+<p>Most likely:</p>
+<ul>
+	<li>Your URL isn't calling a podcast-id (with <em>?podcast-id=X</em>)</li>
+	<li>The podcast doesn't exist</li>
+	<li>The podcast isn't public yet</li>
+</ul>
+<p>If you're unsure, <a href="?podcast-id=1">try this link and see if it works</a>!</p>
